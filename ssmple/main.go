@@ -13,7 +13,14 @@ import (
 )
 
 func usage() {
+	fmt.Printf("%s [ -p <profile> ] [ -r <region> ] [ get|put|delete ] -s <paramPrefix> [ -s prefix ] ... -f filename [ -f filename ] ... \n",
+		filepath.Base(os.Args[0]))
+	fmt.Printf("%s [ -p <profile> ] [ -r <region> ] [ clear ] -s <paramPrefix> [ -s prefix ] ... \n",
+		filepath.Base(os.Args[0]))
+	argHelp := `
 
+`
+	fmt.Println(argHelp)
 }
 
 type ParsedArgs struct {

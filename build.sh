@@ -8,7 +8,7 @@ go get -u github.com/jmespath/go-jmespath
 go get -u github.com/go-ini/ini
 go get -u github.com/hashicorp/golang-lru
 
-modules=(run-java ssmple overrun)
+modules=(javadock ssmple overrun)
 for module in "${modules[@]}"; do
   pushd "$module"
   go fmt
