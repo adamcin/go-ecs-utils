@@ -1,0 +1,124 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go-v2/service/ecs"
+	"github.com/hashicorp/golang-lru"
+	"log"
+	"strings"
+	"sync"
+)
+
+type AwslogsLocation struct {
+	LogGroupName  *string
+	LogStreamName *string
+}
+
+const AwslogsKeyGroup = "awslogs-group"
+const AwslogsKeyStreamPrefix = "awslogs-stream-prefix"
+
+func LocateAwslogsForTask(definition *ecs.ContainerDefinition, forTask *ecs.Task) (*AwslogsLocation, error) {
+	if definition != nil && definition.LogConfiguration.LogDriver == ecs.LogDriverAwslogs {
+		input := AwslogsLocation{}
+		options := definition.LogConfiguration.Options
+
+		if group, ok := options[AwslogsKeyGroup]; ok {
+			input.LogGroupName = &group
+		} else {
+			return nil, errors.New("container definition log options does not contain key " + AwslogsKeyGroup)
+		}
+
+		prefix, ok := options[AwslogsKeyStreamPrefix]
+		if !ok {
+			return nil, errors.New("log streaming requires the container definition to define the " + AwslogsKeyStreamPrefix)
+		}
+
+		if forTask == nil || forTask.TaskArn == nil {
+			return nil, errors.New("failed to locate log stream without task arn")
+		}
+
+		arnParts := strings.Split(*forTask.TaskArn, "/")
+		taskId := arnParts[len(arnParts)-1]
+
+		if definition.Name == nil {
+			return nil, errors.New("failed to locate log stream without container name")
+		}
+
+		streamName := fmt.Sprintf("%s/%s/%s", prefix, *definition.Name, taskId)
+		input.LogStreamName = &streamName
+
+		return &input, nil
+	}
+	return nil, errors.New("no awslog stream available")
+}
+
+func GetOrCreateStream(cws *cloudwatchlogs.CloudWatchLogs, loc *AwslogsLocation) (*cloudwatchlogs.LogStream, error) {
+	clgInput := cloudwatchlogs.CreateLogGroupInput{
+		LogGroupName: loc.LogGroupName}
+	_, clgErr := cws.CreateLogGroupRequest(&clgInput).Send()
+	if clgErr != nil && !strings.HasPrefix(clgErr.Error(), cloudwatchlogs.ErrCodeResourceAlreadyExistsException) {
+		return nil, clgErr
+	}
+
+	clsInput := cloudwatchlogs.CreateLogStreamInput{
+		LogGroupName:  loc.LogGroupName,
+		LogStreamName: loc.LogStreamName}
+	_, clsErr := cws.CreateLogStreamRequest(&clsInput).Send()
+	if clsErr != nil && !strings.HasPrefix(clgErr.Error(), cloudwatchlogs.ErrCodeResourceAlreadyExistsException) {
+		return nil, clsErr
+	}
+
+	logInput := cloudwatchlogs.DescribeLogStreamsInput{}
+	logInput.LogGroupName = loc.LogGroupName
+	logInput.LogStreamNamePrefix = loc.LogStreamName
+
+	logResult, logErr := cws.DescribeLogStreamsRequest(&logInput).Send()
+	if logErr != nil {
+		return nil, logErr
+	} else if len(logResult.LogStreams) > 0 {
+		return &logResult.LogStreams[0], nil
+	} else {
+		return nil, errors.New("failed to establish log stream")
+	}
+}
+
+func GoTailLogs(s *cloudwatchlogs.CloudWatchLogs, l *AwslogsLocation, group *sync.WaitGroup) {
+	cache, _ := lru.New(10000)
+	firstRun := true
+	startTime := int64(0)
+
+	for {
+		flInput := cloudwatchlogs.FilterLogEventsInput{
+			LogGroupName:   l.LogGroupName,
+			LogStreamNames: []string{*l.LogStreamName},
+			StartTime:      &startTime}
+
+		eventsRequest := s.FilterLogEventsRequest(&flInput)
+		events := (&eventsRequest).Paginate()
+		for events.Next() {
+			eventsPage := events.CurrentPage()
+			for _, event := range eventsPage.Events {
+				if event.EventId == nil {
+					continue
+				}
+				if ok, _ := cache.ContainsOrAdd(*event.EventId, *event.EventId); !ok {
+					fmt.Println(*event.Message)
+					if *event.Timestamp > startTime {
+						startTime = *event.Timestamp
+					}
+				}
+			}
+		}
+
+		if events.Err() != nil {
+			log.Printf("WARNING: log stream error: %s\n", events.Err())
+		}
+
+		if firstRun {
+			firstRun = false
+			group.Done()
+		}
+	}
+}
