@@ -20,42 +20,40 @@ import (
 )
 
 func usage() {
-	fmt.Printf("%s [ -h ] [ -p profile ] [ -r region ] -t taskDef -c cluster [ -n image ] [ --run-args <arg> ] -- command [ <arg> ... ]\n",
-		filepath.Base(os.Args[0]))
 	argHelp := `
-  -h | --help               	: print this help message
-  -p | --profile            	: set AWS profile
-  -r | --region             	: set AWS region
-  -t | --task-def           	: Base ECS task definition/family/ARN (see aws ecs run-task help for --task-definition)
-  -c | --cluster            	: ECS Cluster on which to run the task.
-  -n | --container-name     	: Specify name of container definition to override. By default, will use the first found in base task definition.
-  -x | --dry-run            	: Construct aws-cli command but print command instead of running it.
-  -w | --wait               	: Run task and wait for completion.
-  -l | --stream-log         	: Run task and begin tailing log stream.
-  -e | --env name[=value]   	: Override environment variables. If =value is not specified, the value for the specified name will be read from this
-                            	  command's environment.
-       --env-file           	: Override container environment variables using a specifed env-file. 
-       --cpu                	: Override container CPU requirement. 
-       --mem                	: Override container Memory limit.
-       --mem-res            	: Override container Memory Reservation.
-       --exec-role          	: Override the associated Execution Role ARN.
-       --task-role          	: Override the associated Task Role ARN.
-       --shell              	: Specify a shell to use to run the command. Must be a prefix for running a single-quoted string argument as a
-                            	  command, which will be appended with a leading space after construction.
-       --no-shell           	: Disable quoting as a shell command. Overrides --shell preference.
-	
-  -- <command> [ <arg> ... ]	: Override the task container command, 
+%s [ -h ] [ -p profile ] [ -r region ] -t taskDef -c cluster [ -n image ] [ --run-args <arg> ] -- command [ <arg> ... ]
+  -h | --help                   : print this help message
+  -p | --profile                : set AWS profile
+  -r | --region                 : set AWS region
+  -t | --task-def               : Base ECS task definition/family/ARN (see aws ecs run-task help for --task-definition)
+  -c | --cluster                : ECS Cluster on which to run the task.
+  -n | --container-name         : Specify name of container definition to override. By default, will use the first found in base task definition.
+  -x | --dry-run                : Construct aws-cli command but print command instead of running it.
+  -w | --wait                   : Run task and wait for completion.
+  -l | --stream-log             : Run task and begin tailing log stream.
+  -e | --env name[=value]       : Override environment variables. If =value is not specified, the value for the specified name will be read from this
+                                  command's environment.
+       --env-file               : Override container environment variables using a specifed env-file. 
+       --cpu                    : Override container CPU requirement. 
+       --mem                    : Override container Memory limit.
+       --mem-res                : Override container Memory Reservation.
+       --exec-role              : Override the associated Execution Role ARN.
+       --task-role              : Override the associated Task Role ARN.
+       --shell                  : Specify a shell to use to run the command. Must be a prefix for running a single-quoted string argument as a
+                                  command, which will be appended with a leading space after construction.
+       --no-shell               : Disable quoting as a shell command. Overrides --shell preference.
 
-FARGATE                     	: Specifying the following arguments implies using the FARGATE launch type.
-  -f:ip	  | --fargate:ip    	: Request Fargate assign a public IP address to the container.
-  -f:net  | --fargate:net   	: Choose network configs based on a subnet ID or a tag=value pair attached to the desired subnet(s).
-                            	  The default VPC security group is selected by default.
-  -f:host | --fargate:host  	: Build network configuration to match a running EC2 instance. This will set desired security groups and subnets based on
-                            	  the particular configuration of the host.
-  -f:sg	  | --fargate:sg    	: Specify additional security groups by 'sg-' ID or by tag=value, to be attached to the task.
+  -- <command> [ <arg> ... ]    : Override the task container command, 
 
+FARGATE                         : Specifying the following arguments implies using the FARGATE launch type.
+  -f:ip	  | --fargate:ip        : Request Fargate assign a public IP address to the container.
+  -f:net  | --fargate:net       : Choose network configs based on a subnet ID or a tag=value pair attached to the desired subnet(s).
+                                  The default VPC security group is selected by default.
+  -f:host | --fargate:host      : Build network configuration to match a running EC2 instance. This will set desired security groups and subnets based on
+                                  the particular configuration of the host.
+  -f:sg	  | --fargate:sg        : Specify additional security groups by 'sg-' ID or by tag=value, to be attached to the task.
 `
-	fmt.Println(argHelp)
+	fmt.Printf(argHelp, filepath.Base(os.Args[0]))
 }
 
 type ParsedArgs struct {
@@ -160,34 +158,19 @@ ArgLoop:
 		}
 
 		switch opt {
-		case "-p":
-			fallthrough
-		case "--profile":
+		case "-p", "--profile":
 			awsProfile = os.Args[i+1]
 			i++
-		case "-r":
-			fallthrough
-		case "--region":
+		case "-r", "--region":
 			awsRegion = os.Args[i+1]
 			i++
-		case "-t":
-			fallthrough
-		case "--task-def":
-			fallthrough
-		case "--task-definition":
+		case "-t", "--task-def", "--task-definition":
 			taskDef = os.Args[i+1]
 			i++
-		case "-c":
-			fallthrough
-		case "--cluster":
+		case "-c", "--cluster":
 			cluster = os.Args[i+1]
 			i++
-		case "-n":
-			fallthrough
-		case "--image-name":
-			log.Println("--image-name is deprecated. please use -n or --container-name")
-			fallthrough
-		case "--container-name":
+		case "-n", "--container-name":
 			containerName = os.Args[i+1]
 			i++
 		case "--cpu":
@@ -214,9 +197,7 @@ ArgLoop:
 				memoryReservation = ival
 			}
 			i++
-		case "-e":
-			fallthrough
-		case "--env":
+		case "-e", "--env":
 			val, err := ValidateEnv(os.Args[i+1])
 			i++
 			if err != nil {
@@ -232,21 +213,13 @@ ArgLoop:
 			} else {
 				envOverrides = append(envOverrides, vals...)
 			}
-		case "-x":
-			fallthrough
-		case "--dry-run":
+		case "-x", "--dry-run":
 			dryRun = !isNoOpt
-		case "-l":
-			fallthrough
-		case "--stream-log":
+		case "-l", "--stream-log":
 			streamLog = !isNoOpt
-		case "-w":
-			fallthrough
-		case "--wait":
+		case "-w", "--wait":
 			waitStopped = !isNoOpt
-		case "-h":
-			fallthrough
-		case "--help":
+		case "-h", "--help":
 			usage()
 			os.Exit(0)
 		case "--exec-role":
@@ -261,34 +234,24 @@ ArgLoop:
 				shellPrefix = os.Args[i+1]
 				i++
 			}
-		case "-f":
-			fallthrough
-		case "--fargate":
+		case "-f", "--fargate":
 			launchFargate = !isNoOpt
-		case "-f:net":
-			fallthrough
-		case "--fargate:net":
+		case "-f:net", "--fargate:net":
 			launchFargate = true
 			parsed, filters := readFilterArgs(aws.String("tag:Name"), os.Args[i+1:]...)
 			vpcNetFilters = append(vpcNetFilters, filters...)
 			i = i + parsed
-		case "-f:host":
-			fallthrough
-		case "--fargate:host":
+		case "-f:host", "--fargate:host":
 			launchFargate = true
 			parsed, filters := readFilterArgs(aws.String("tag:Name"), os.Args[i+1:]...)
 			vpcHostFilters = append(vpcHostFilters, filters...)
 			i = i + parsed
-		case "-f:sg":
-			fallthrough
-		case "--fargate:sg":
+		case "-f:sg", "--fargate:sg":
 			launchFargate = true
 			parsed, filters := readFilterArgs(aws.String("tag:Name"), os.Args[i+1:]...)
 			vpcSgFilters = append(vpcSgFilters, filters...)
 			i = i + parsed
-		case "-f:ip":
-			fallthrough
-		case "--fargate:ip":
+		case "-f:ip", "--fargate:ip":
 			launchFargate = true
 			netPublicIp = !isNoOpt
 		case "--":

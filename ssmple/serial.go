@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"github.com/rickar/props"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Serial interface {
@@ -55,6 +57,20 @@ func GetSerialFor(path string) Serial {
 		serial = extSerial
 	}
 	return serial
+}
+
+func RegisterSerial(serial Serial, exts ...string) error {
+	for _, ext := range exts {
+		if !strings.HasPrefix(ext, ".") {
+			return errors.New("serial must be registered with an extension beginning with '.'")
+		}
+		if _, found := serials[ext]; found {
+			return errors.New("serial already registered for extension " + ext)
+		}
+		serials[ext] = serial
+	}
+
+	return nil
 }
 
 func init() {

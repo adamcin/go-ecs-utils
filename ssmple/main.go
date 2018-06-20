@@ -12,24 +12,14 @@ import (
 	"strings"
 )
 
-func usage() {
-	fmt.Printf("%s [ -p <profile> ] [ -r <region> ] [ get|put|delete ] -s <paramPrefix> [ -s prefix ] ... -f filename [ -f filename ] ... \n",
-		filepath.Base(os.Args[0]))
-	fmt.Printf("%s [ -p <profile> ] [ -r <region> ] [ clear ] -s <paramPrefix> [ -s prefix ] ... \n",
-		filepath.Base(os.Args[0]))
-	argHelp := `
-
-`
-	fmt.Println(argHelp)
-}
-
 type ParsedArgs struct {
-	AwsProfile string
+	// pass-through profile and region args to aws sdk
+	AwsProfile, AwsRegion string
 
-	AwsRegion string
-
+	// get, put, delete, clear
 	SsmCmd string
 
+	//
 	ConfDir string
 
 	KeyIdPutAll string
@@ -52,7 +42,7 @@ const NoOptPrefix = "--no-"
 func parseArgs() ParsedArgs {
 	awsProfile := ""
 	awsRegion := ""
-	ssmCmd := "get"
+	ssmCmd := ""
 	rawConfDir := "."
 	_, cwdErr := os.Getwd()
 	if cwdErr != nil {
@@ -67,6 +57,7 @@ func parseArgs() ParsedArgs {
 	clearOnPut := false
 	noStoreSecureString := false
 	noPutSecureString := false
+	isHelp := false
 
 	for i := 1; i < len(os.Args); i++ {
 		opt := os.Args[i]
@@ -76,39 +67,27 @@ func parseArgs() ParsedArgs {
 		}
 
 		switch opt {
-		case "-p":
-			fallthrough
-		case "--profile":
+		case "-h", "--help":
+			isHelp = true
+		case "-p", "--profile":
 			awsProfile = os.Args[i+1]
 			i++
-		case "-r":
-			fallthrough
-		case "--region":
+		case "-r", "--region":
 			awsRegion = os.Args[i+1]
 			i++
-		case "-C":
-			fallthrough
-		case "--conf-dir":
+		case "-C", "--conf-dir":
 			rawConfDir = os.Args[i+1]
 			i++
-		case "-f":
-			fallthrough
-		case "--filename":
+		case "-f", "--filename":
 			filenames = append(filenames, os.Args[i+1])
 			i++
-		case "-s":
-			fallthrough
-		case "--starts-with":
+		case "-s", "--starts-with":
 			prefixes = append(prefixes, os.Args[i+1])
 			i++
-		case "-k":
-			fallthrough
-		case "--key-id-put-all":
+		case "-k", "--key-id-put-all":
 			keyIdPutAll = os.Args[i+1]
 			i++
-		case "-o":
-			fallthrough
-		case "--overwrite-put":
+		case "-o", "--overwrite-put":
 			overwritePut = !isNoOpt
 		case "--clear-on-put":
 			clearOnPut = !isNoOpt
@@ -116,18 +95,22 @@ func parseArgs() ParsedArgs {
 			noStoreSecureString = isNoOpt
 		case "--put-secure-string":
 			noPutSecureString = isNoOpt
-		case "put":
-			fallthrough
-		case "delete":
-			fallthrough
-		case "clear":
-			fallthrough
-		case "get":
+		case "get", "put", "delete", "clear":
 			ssmCmd = opt
 		default:
-			usage()
+			usage(ssmCmd)
 			log.Fatal(fmt.Sprintf("Unrecognized option %s", opt))
 		}
+	}
+
+	if isHelp {
+		usage(ssmCmd)
+		os.Exit(0)
+	}
+
+	if len(ssmCmd) == 0 {
+		usage(ssmCmd)
+		os.Exit(1)
 	}
 
 	confDir, confErr := filepath.Abs(rawConfDir)

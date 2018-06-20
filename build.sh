@@ -7,6 +7,7 @@ go get -u github.com/rickar/props
 go get -u github.com/jmespath/go-jmespath
 go get -u github.com/go-ini/ini
 go get -u github.com/hashicorp/golang-lru
+go get -u gopkg.in/yaml.v2
 
 modules=(javadock ssmple overrun)
 for module in "${modules[@]}"; do

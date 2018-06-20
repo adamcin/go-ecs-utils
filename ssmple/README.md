@@ -3,13 +3,13 @@ ssmple CLI
 
 Config File Management tool using AWS SSM Shared Parameter Store, serialized to JSON, YAML, or Java properties files on hosts.
 
-JSON, YAML support are TBD. see [ssmple-java](https://github.com/adamcin/ssmple)
+see [ssmple-java](https://github.com/adamcin/ssmple) for legacy impl
 
 Usage
 -----
 
 ```
-./ssmple --profile myprofile --region us-east-1 -C /ep/conf \
+./ssmple --profile myprofile --region us-east-1 get -C /ep/conf \
     -f ep.properties \
     -f ep.override.properties \
     -s /ep/ecs/conf \

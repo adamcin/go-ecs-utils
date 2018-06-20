@@ -23,10 +23,7 @@ const Xms = "-Xms"
 const Xmx = "-Xmx"
 
 func usage() {
-	fmt.Printf("%s [ --testlimit <totalMemory> ] [ --javacmd <javaexec> ] [ --showmem or --showjava ] <javaArgs> ...\n",
-		filepath.Base(os.Args[0]))
-	fmt.Printf("%s --help\n", filepath.Base(os.Args[0]))
-	argHelp := `
+	argHelp := `%s [ --testlimit <totalMemory> ] [ --javacmd <javaexec> ] [ --showmem or --showjava ] <javaArgs> ...
   --testlimit <totalMemory>       : Override cgroup memory limit to test this script's behavior outside of a cgroup.
   --javacmd <javaexec>            : Override JRE_HOME- or JAVA_HOME-relative bin/java command.
   --showjava                      : Print the underlying java command and quit.
@@ -34,12 +31,12 @@ func usage() {
   --help                          : Print this help message and exit.
 
   <javaArgs> ...                  : Specify additional arguments for passing to java executable. See below for special cases:
-    -XX:MaxMetaspaceSize=?        : If not specified and cgroup limit is in effect, will be set to at least 64m, 
+    -XX:MaxMetaspaceSize=?        : If not specified and cgroup limit is in effect, will be set to at least %s, 
                                     and at least -XX:MetaspaceSize, if that flag is specified.
     -Xmx|-XX:MaxHeapSize=?        : May be overridden to fit within cgroup memory limit minus -XX:MaxMetaspaceSize.
     -Xms|-XX:InitialHeapSize=?    : If specified, may be overridden to fit -Xmx.
 `
-	fmt.Println(argHelp)
+	fmt.Printf(argHelp, filepath.Base(os.Args[0]), MinimumMaxMetaSpaceSize)
 }
 
 type ParsedArgs struct {
