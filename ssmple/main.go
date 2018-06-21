@@ -1,3 +1,19 @@
+/*
+ * Copyright 2018 Mark Adamcin
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package main
 
 import (
@@ -19,21 +35,28 @@ type ParsedArgs struct {
 	// get, put, delete, clear
 	SsmCmd string
 
-	//
+	// config directory for filename relative path resolution
 	ConfDir string
 
+	// KMS key ID or key alias for encrypting all params on put
 	KeyIdPutAll string
 
+	// true to overwrite existing params on put
 	OverwritePut bool
 
+	// true to clear all params in a path prefix before put
 	ClearOnPut bool
 
+	// true to avoid storing secure string parameters on get
 	NoStoreSecureString bool
 
+	// true to avoid sending secure strings on put
 	NoPutSecureString bool
 
+	// the slice of filenames, in order of declaration
 	Filenames []string
 
+	// the slice of path prefixes, in order of declaration
 	Prefixes []string
 }
 
