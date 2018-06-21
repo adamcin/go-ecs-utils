@@ -28,7 +28,7 @@ func usage(operation string) {
 
 	globalHelp := fmt.Sprintf(`GENERAL USAGE
 
-  %[1]s [ --help ] [ global opts ] [ operation ] [ options ]
+  %[1]s [ global opts ] [ operation ] [ options ]
 
 GLOBAL OPTIONS
 
@@ -81,23 +81,23 @@ OPERATION
 
       1. Simplest Case
 
-        %[1]s get -s /ep/conf -C /root/ep/conf -f ecs.properties
+           %[1]s get -s /ep/conf -C /root/ep/conf -f ecs.properties
 
-      Get SSM parameters matching /ep/conf/ecs/* and store them in a local file at path /root/ep/conf/ecs.properties.
+         Get SSM parameters matching /ep/conf/ecs/* and store them in a local file at path /root/ep/conf/ecs.properties.
 
       2. Multiple files
       
-        %[1]s get -s /ep/conf -C /root/ep/conf -f ecs.properties -f tomcat.properties
+           %[1]s get -s /ep/conf -C /root/ep/conf -f ecs.properties -f tomcat.properties
 
-      Get SSM parameters named /ep/conf/ecs/* and /ep/conf/tomcat/*, and store them at paths /root/ep/conf/ecs.properties 
-      and /root/ep/conf/tomcat.properties, respectively.
+         Get SSM parameters named /ep/conf/ecs/* and /ep/conf/tomcat/*, and store them at paths /root/ep/conf/ecs.properties 
+         and /root/ep/conf/tomcat.properties, respectively.
 
       3. Multiple files, Multiple prefixes
       
-        %[1]s get -s /ep/conf -s /ep/conf/prod -C /root/ep/conf -f ecs.properties -f tomcat.properties
+           %[1]s get -s /ep/conf -s /ep/conf/prod -C /root/ep/conf -f ecs.properties -f tomcat.properties
 
-      Get SSM parameters named /ep/conf/ecs/* and /ep/conf/prod/ecs/*, and /ep/conf/tomcat/* and /ep/conf/prod/tomcat/*, and store them at paths 
-      /root/ep/conf/ecs.properties and /root/ep/conf/tomcat.properties, respectively.
+         Get SSM parameters named /ep/conf/ecs/* and /ep/conf/prod/ecs/*, and /ep/conf/tomcat/* and /ep/conf/prod/tomcat/*, and store them at paths 
+         /root/ep/conf/ecs.properties and /root/ep/conf/tomcat.properties, respectively.
 `, argv0)
 }
 
@@ -130,17 +130,17 @@ OPERATION
 
       1. Simplest Case
 
-        %[1]s put -s /ep/conf -C /root/ep/conf -f ecs.properties
+           %[1]s put -s /ep/conf -C /root/ep/conf -f ecs.properties
 
-      Read values from /root/ep/conf/ecs.properties, and create SSM parameters at path prefix /ep/conf/ecs, with parameter names matching the
-      property keys.
+         Read values from /root/ep/conf/ecs.properties, and create SSM parameters at path prefix /ep/conf/ecs, with parameter names matching the
+         property keys.
 
       2. Multiple files
       
-        %[1]s put -s /ep/conf -C /root/ep/conf -f ecs.properties -f tomcat.properties
+           %[1]s put -s /ep/conf -C /root/ep/conf -f ecs.properties -f tomcat.properties
 
-      Read values from /root/ep/conf/ecs.properties and /root/ep/conf/tomcat.properties, and create SSM parameters at path prefixes /ep/conf/ecs
-      and /ep/conf/tomcat, respectively.
+         Read values from /root/ep/conf/ecs.properties and /root/ep/conf/tomcat.properties, and create SSM parameters at path prefixes /ep/conf/ecs
+         and /ep/conf/tomcat, respectively.
 `, argv0)
 }
 
@@ -167,17 +167,17 @@ OPERATION
 
       1. Simplest Case
 
-        %[1]s delete -s /ep/conf -C /root/ep/conf -f ecs.properties
+           %[1]s delete -s /ep/conf -C /root/ep/conf -f ecs.properties
 
-      Read property keys from /root/ep/conf/ecs.properties, and delete any SSM parameters at path prefix /ep/conf/ecs whose parameter names are 
-      present in the file.
+         Read property keys from /root/ep/conf/ecs.properties, and delete any SSM parameters at path prefix /ep/conf/ecs whose parameter names are 
+         present in the file.
 
       2. Multiple files
       
-        %[1]s put -s /ep/conf -C /root/ep/conf -f ecs.properties -f tomcat.properties
+           %[1]s put -s /ep/conf -C /root/ep/conf -f ecs.properties -f tomcat.properties
 
-      Read property keys from /root/ep/conf/ecs.properties and /root/ep/conf/tomcat.properties, and delete any SSM parameters at path prefixes 
-      /ep/conf/ecs and /ep/conf/tomcat, respectively, whose parameter names are present as keys in the associated file.
+         Read property keys from /root/ep/conf/ecs.properties and /root/ep/conf/tomcat.properties, and delete any SSM parameters at path prefixes 
+         /ep/conf/ecs and /ep/conf/tomcat, respectively, whose parameter names are present as keys in the associated file.
 `, argv0)
 }
 
@@ -200,10 +200,10 @@ OPERATION
 
       1. Simplest Case
 
-        %[1]s clear -s /ep/conf
+           %[1]s clear -s /ep/conf
 
-      Read property keys from /root/ep/conf/ecs.properties, and delete any SSM parameters at path prefix /ep/conf/ecs whose parameter names are 
-      present in the file.
+         Read property keys from /root/ep/conf/ecs.properties, and delete any SSM parameters at path prefix /ep/conf/ecs whose parameter names are 
+         present in the file.
 `, argv0)
 }
 
