@@ -28,7 +28,7 @@ func usage(operation string) {
 
 	globalHelp := fmt.Sprintf(`GENERAL USAGE
 
-  %[1]s [ global opts ] [ operation ] [ options ]
+  %[1]s [ global opts ] <operation> [ options ]
 
 GLOBAL OPTIONS
 

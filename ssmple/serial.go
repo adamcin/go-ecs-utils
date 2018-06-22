@@ -24,6 +24,7 @@ import (
 	"strings"
 )
 
+// the
 type Serial interface {
 	Load(path string) (map[string]string, error)
 	Save(path string, dict *map[string]string) error

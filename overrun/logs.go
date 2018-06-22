@@ -70,31 +70,33 @@ func LocateAwslogsForTask(definition *ecs.ContainerDefinition, forTask *ecs.Task
 	return nil, errors.New("no awslog stream available")
 }
 
+func errorIsAlreadyExists(err error) bool {
+	return !strings.HasPrefix(err.Error(), cloudwatchlogs.ErrCodeResourceAlreadyExistsException)
+}
+
 func GetOrCreateStream(cws *cloudwatchlogs.CloudWatchLogs, loc *AwslogsLocation) (*cloudwatchlogs.LogStream, error) {
 	clgInput := cloudwatchlogs.CreateLogGroupInput{
 		LogGroupName: loc.LogGroupName}
-	_, clgErr := cws.CreateLogGroupRequest(&clgInput).Send()
-	if clgErr != nil && !strings.HasPrefix(clgErr.Error(), cloudwatchlogs.ErrCodeResourceAlreadyExistsException) {
-		return nil, clgErr
+	if _, err := cws.CreateLogGroupRequest(&clgInput).Send(); err != nil && !errorIsAlreadyExists(err) {
+		return nil, err
 	}
 
 	clsInput := cloudwatchlogs.CreateLogStreamInput{
 		LogGroupName:  loc.LogGroupName,
 		LogStreamName: loc.LogStreamName}
-	_, clsErr := cws.CreateLogStreamRequest(&clsInput).Send()
-	if clsErr != nil && !strings.HasPrefix(clgErr.Error(), cloudwatchlogs.ErrCodeResourceAlreadyExistsException) {
-		return nil, clsErr
+	if _, err := cws.CreateLogStreamRequest(&clsInput).Send(); err != nil && !errorIsAlreadyExists(err) {
+		return nil, err
 	}
 
 	logInput := cloudwatchlogs.DescribeLogStreamsInput{}
 	logInput.LogGroupName = loc.LogGroupName
 	logInput.LogStreamNamePrefix = loc.LogStreamName
 
-	logResult, logErr := cws.DescribeLogStreamsRequest(&logInput).Send()
-	if logErr != nil {
-		return nil, logErr
-	} else if len(logResult.LogStreams) > 0 {
-		return &logResult.LogStreams[0], nil
+	result, err := cws.DescribeLogStreamsRequest(&logInput).Send()
+	if err != nil {
+		return nil, err
+	} else if len(result.LogStreams) > 0 {
+		return &result.LogStreams[0], nil
 	} else {
 		return nil, errors.New("failed to establish log stream")
 	}

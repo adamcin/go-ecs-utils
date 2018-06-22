@@ -36,8 +36,7 @@ import (
 )
 
 func usage() {
-	argHelp := `
-%s [ -h ] [ -p profile ] [ -r region ] -t taskDef -c cluster [ -n image ] [ --run-args <arg> ] -- command [ <arg> ... ]
+	argHelp := `%s -c cluster -t taskDef [ <opt> ... ] -- command [ <arg> ... ]
   -h | --help                   : print this help message
   -p | --profile                : set AWS profile
   -r | --region                 : set AWS region
@@ -47,7 +46,7 @@ func usage() {
   -x | --dry-run                : Construct aws-cli command but print command instead of running it.
   -w | --wait                   : Run task and wait for completion.
   -l | --stream-log             : Run task and begin tailing log stream.
-  -e | --env name[=value]       : Override environment variables. If =value is not specified, the value for the specified name will be read from this
+  -e | --env <name[=value]>     : Override environment variables. If =value is not specified, the value for the specified name will be read from this
                                   command's environment.
        --env-file               : Override container environment variables using a specifed env-file. 
        --cpu                    : Override container CPU requirement. 
@@ -55,7 +54,7 @@ func usage() {
        --mem-res                : Override container Memory Reservation.
        --exec-role              : Override the associated Execution Role ARN.
        --task-role              : Override the associated Task Role ARN.
-       --shell                  : Specify a shell to use to run the command. Must be a prefix for running a single-quoted string argument as a
+       --shell <prefix>         : Specify a shell to use to run the command. Must be a prefix for running a single-quoted string argument as a
                                   command, which will be appended with a leading space after construction.
        --no-shell               : Disable quoting as a shell command. Overrides --shell preference.
 
@@ -73,23 +72,19 @@ FARGATE                         : Specifying the following arguments implies usi
 }
 
 type ParsedArgs struct {
-	AwsProfile string
-
-	AwsRegion string
-
-	TaskDef string
+	AwsProfile, AwsRegion string
 
 	Cluster string
 
+	TaskDef string
+
 	ContainerName string
+
+	Environment map[string]string
 
 	DryRun bool
 
-	StreamLog bool
-
-	WaitStopped bool
-
-	EnvOverrides map[string]string
+	WaitStopped, StreamLog bool
 
 	Cpu int64
 
@@ -292,7 +287,7 @@ ArgLoop:
 		Cpu:               cpu,
 		Memory:            memory,
 		MemoryReservation: memoryReservation,
-		EnvOverrides:      ConvertKVStringsToMap(envOverrides),
+		Environment:       ConvertKVStringsToMap(envOverrides),
 		ExecRoleArn:       execRoleArn,
 		TaskRoleArn:       taskRoleArn,
 		ShellPrefix:       shellPrefix,
@@ -313,16 +308,24 @@ func sigintStopTask(sigs chan os.Signal, s *ecs.ECS, taskArn *string, cluster *s
 		Reason:  aws.String("overrun SIGINT"),
 		Task:    taskArn}
 
-	sig := <-sigs
+SignalLoop:
+	for {
+		req := s.StopTaskRequest(&stopInput)
 
-	if sig == syscall.SIGINT {
-		if _, stopErr := s.StopTaskRequest(&stopInput).Send(); stopErr != nil {
-			// sigint
-			log.Printf("ERROR: SIGINT failed to stop task %s! keep mashing that ctrl-c!\n", *taskArn)
-		} else {
-			// detach from SIGINT.
-			signal.Stop(sigs)
-			log.Printf("user requested to stop task %s using ctrl-c/SIGINT\n", *taskArn)
+		sig, ok := <-sigs
+		if !ok {
+			break SignalLoop
+		}
+
+		if sig == syscall.SIGINT {
+			if _, err := req.Send(); err != nil {
+				// sigint
+				log.Printf("ERROR: SIGINT failed to stop task %s! keep mashing that ctrl-c!\n", *taskArn)
+			} else {
+				// detach from SIGINT.
+				signal.Stop(sigs)
+				log.Printf("user requested to stop task %s using ctrl-c/SIGINT\n", *taskArn)
+			}
 		}
 	}
 }
@@ -664,7 +667,7 @@ func buildOverrides(prefs *ParsedArgs) *ecs.TaskOverride {
 		cnt.Command = constructCommand(prefs)
 	}
 
-	for key, val := range prefs.EnvOverrides {
+	for key, val := range prefs.Environment {
 		cnt.Environment = append(cnt.Environment, ecs.KeyValuePair{Name: &key, Value: &val})
 	}
 

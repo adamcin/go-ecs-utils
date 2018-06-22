@@ -208,8 +208,8 @@ func parseMem(mem string) int64 {
 		log.Fatal("Failed to parse memory value " + mem)
 	}
 
-	baseInt, intErr := strconv.ParseInt(base, 10, 64)
-	if intErr != nil {
+	baseInt, err := strconv.ParseInt(base, 10, 64)
+	if err != nil {
 		log.Fatal("Failed to parse memory value " + mem)
 	}
 

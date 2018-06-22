@@ -21,11 +21,16 @@ import (
 	"path/filepath"
 )
 
+// a FileStore struct accumulates the parameter state for each file.
+// the FileStore is seri/deseried from the Path using a Serial object
+// matched to the extension of the path.
 type FileStore struct {
 	Path string
 	Dict map[string]string
 }
 
+// the *FileStore.Load() function encapsulates the input/output of the
+// associated Serial
 func (fs *FileStore) Load() error {
 	serial := GetSerialFor(fs.Path)
 	dict, err := serial.Load(fs.Path)
