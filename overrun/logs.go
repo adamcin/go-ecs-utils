@@ -70,21 +70,25 @@ func LocateAwslogsForTask(definition *ecs.ContainerDefinition, forTask *ecs.Task
 	return nil, errors.New("no awslog stream available")
 }
 
-func errorIsAlreadyExists(err error) bool {
-	return !strings.HasPrefix(err.Error(), cloudwatchlogs.ErrCodeResourceAlreadyExistsException)
+func ErrorIsAlreadyExists(err error) bool {
+	return strings.HasPrefix(err.Error(), cloudwatchlogs.ErrCodeResourceAlreadyExistsException)
+}
+
+func ErrorIsResourceNotFound(err error) bool {
+	return strings.HasPrefix(err.Error(), cloudwatchlogs.ErrCodeResourceNotFoundException)
 }
 
 func GetOrCreateStream(cws *cloudwatchlogs.CloudWatchLogs, loc *AwslogsLocation) (*cloudwatchlogs.LogStream, error) {
 	clgInput := cloudwatchlogs.CreateLogGroupInput{
 		LogGroupName: loc.LogGroupName}
-	if _, err := cws.CreateLogGroupRequest(&clgInput).Send(); err != nil && !errorIsAlreadyExists(err) {
+	if _, err := cws.CreateLogGroupRequest(&clgInput).Send(); err != nil && !ErrorIsAlreadyExists(err) {
 		return nil, err
 	}
 
 	clsInput := cloudwatchlogs.CreateLogStreamInput{
 		LogGroupName:  loc.LogGroupName,
 		LogStreamName: loc.LogStreamName}
-	if _, err := cws.CreateLogStreamRequest(&clsInput).Send(); err != nil && !errorIsAlreadyExists(err) {
+	if _, err := cws.CreateLogStreamRequest(&clsInput).Send(); err != nil && !ErrorIsAlreadyExists(err) {
 		return nil, err
 	}
 
@@ -131,10 +135,10 @@ func GoTailLogs(s *cloudwatchlogs.CloudWatchLogs, l *AwslogsLocation, group *syn
 		}
 
 		if events.Err() != nil {
-			log.Printf("WARNING: log stream error: %s\n", events.Err())
-		}
-
-		if firstRun {
+			if !ErrorIsResourceNotFound(events.Err()) {
+				log.Printf("WARNING: log stream error: %s\n", events.Err())
+			}
+		} else if firstRun {
 			firstRun = false
 			group.Done()
 		}
