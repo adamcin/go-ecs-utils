@@ -9,7 +9,7 @@ go get -u github.com/go-ini/ini
 go get -u github.com/hashicorp/golang-lru
 go get -u gopkg.in/yaml.v2
 
-modules=(javadock ssmple overrun)
+modules=(jvshim ssmple overrun)
 for module in "${modules[@]}"; do
   pushd "$module"
   go fmt

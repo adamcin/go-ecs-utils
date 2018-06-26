@@ -16,8 +16,8 @@ overrun
 Wrapper for the `aws ecs run-task` command.
 
 
-javadock
---------
+jvshim
+------
 
 Wrapper for $JAVA_HOME/bin/java, versions 8 and 9, which do not natively support cgroup memory limits.
 

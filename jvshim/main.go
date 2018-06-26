@@ -41,7 +41,8 @@ const Xmx = "-Xmx"
 func usage() {
 	argHelp := `%s [ --testlimit <totalMemory> ] [ --javacmd <javaexec> ] [ --showmem or --showjava ] <javaArgs> ...
   --testlimit <totalMemory>       : Override cgroup memory limit to test this script's behavior outside of a cgroup.
-  --javacmd <javaexec>            : Override JRE_HOME- or JAVA_HOME-relative bin/java command.
+  --javacmd <javaexec>            : Specify the java command to use. Will search the PATH for relative paths. Overrides JRE_HOME- or 
+                                    JAVA_HOME-relative bin/java command.
   --showjava                      : Print the underlying java command and quit.
   --showmem                       : Print jvm settings/flags with -version.
   --help                          : Print this help message and exit.
@@ -252,6 +253,54 @@ func fmtMem(base int64, pow uint) string {
 	}
 }
 
+// ErrNotFound is the error resulting if a path search failed to find an executable file.
+func findExecutable(file string) error {
+	d, err := os.Stat(file)
+	if err != nil {
+		return err
+	}
+	if m := d.Mode(); !m.IsDir() && m&0111 != 0 {
+		return nil
+	}
+	return os.ErrPermission
+}
+
+// modified version of LookPath that skips argv0 if found in the path, which should
+// allow linking this as "java" into the path.
+// LookPath searches for an executable binary named file
+// in the directories named by the PATH environment variable.
+// If file contains a slash, it is tried directly and the PATH is not consulted.
+// The result may be an absolute path or a path relative to the current directory.
+func lookPathNotMe(file string) (string, error) {
+	// NOTE(rsc): I wish we could use the Plan 9 behavior here
+	// (only bypass the path if file begins with / or ./ or ../)
+	// but that would not match all the Unix shells.
+	if strings.Contains(file, "/") {
+		err := findExecutable(file)
+		if err == nil {
+			return file, nil
+		}
+		return "", &exec.Error{file, err}
+	}
+	path := os.Getenv("PATH")
+	me, merr := filepath.Abs(os.Args[0])
+	for _, dir := range filepath.SplitList(path) {
+		if dir == "" {
+			// Unix shell semantics: path element "" means "."
+			dir = "."
+		}
+		path := filepath.Join(dir, file)
+		if merr == nil && path == me {
+			// skip me in case I was found on the path
+			continue
+		}
+		if err := findExecutable(path); err == nil {
+			return path, nil
+		}
+	}
+	return "", &exec.Error{file, exec.ErrNotFound}
+}
+
 func determineJavaExecutable(javacmd string) (string, error) {
 	javaExec := "java"
 	if len(os.Getenv("JRE_HOME")) > 0 {
@@ -261,7 +310,7 @@ func determineJavaExecutable(javacmd string) (string, error) {
 	}
 
 	if len(javacmd) > 0 {
-		javacmd, err := exec.LookPath(javacmd)
+		javacmd, err := lookPathNotMe(javacmd)
 		if err != nil {
 			return "", err
 		} else {
@@ -295,7 +344,7 @@ func main() {
 
 	javaExec, err := determineJavaExecutable(prefs.JavaCmd)
 	if err != nil {
-		log.Fatal("Failed to determine java executable.", err)
+		log.Fatal("Failed to determine java executable. ", err)
 	}
 
 	totalLimit := determineTotalMemLimit(prefs.TestLimit)
@@ -384,7 +433,8 @@ func main() {
 		fmt.Println(javaExec, strings.Join(append(jvmArgs, prefs.ProgramArgs...), " "))
 	} else {
 		// exec the java executable with the collected arguments
-		if err := syscall.Exec(javaExec, append(jvmArgs, prefs.ProgramArgs...), os.Environ()); err != nil {
+		// we must use javaExec both as argv0 AND as argv[0]
+		if err := syscall.Exec(javaExec, append(append([]string{javaExec}, jvmArgs...), prefs.ProgramArgs...), os.Environ()); err != nil {
 			log.Fatal(err)
 		}
 	}

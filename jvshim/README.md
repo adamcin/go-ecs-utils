@@ -1,5 +1,5 @@
-javadock
-========
+jvmshim
+=======
 
 Wrapper for Java 8/9 `$JAVA_HOME/bin/java` for use in docker containers, where the JVM settings must adjusted to conform to cgroup memory limits.
 
@@ -9,3 +9,5 @@ Essentially, the issue with `-XX:+UseCGroupMemoryLimitForHeap` in Java 8u131+ is
 This command rewrites the JVM memory setting arguments before being passed through to `$JAVA_HOME/bin/java` to make sure that a specific, or at least
 minimum `-XX:MaxMetaspaceSize` is set, and that the `-Xmx` and `-Xms` are reduced, if necessary, such that `MaxMetaspaceSize >= 64m`,
 `MetaspaceSize <= MaxMetaspaceSize`, `InitialHeapSize <= MaxHeapSize`, and `MaxHeapSize + MaxMetaspaceSize <= CGroupMemLimit`.
+
+This command was ported from a bash script that is included along side for comparison.

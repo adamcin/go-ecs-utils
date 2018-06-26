@@ -36,24 +36,19 @@ const MatchShortFilter = "^[^=]+=.*$"
 const MatchLongFilter = "^Name=([^,]+),Values=(.*)$"
 
 func ParseEc2Filter(filter string, defaultFilter *string) (bool, ec2.Filter) {
-	// quickly escape when the defaultFilter is not defined and the string starts with a hyphen,
-	// indicating a next argument.
-	if defaultFilter == nil && strings.HasPrefix(filter, "-") {
-		return false, ec2.Filter{}
-	}
-
-	// otherwise, regex match according to our rules.
 	longPat := regexp.MustCompile(MatchLongFilter)
 	if longPat.MatchString(filter) {
 		subs := longPat.FindStringSubmatch(filter)
-		name := subs[0]
-		vals := strings.Split(subs[1], ",")
+		name := subs[1]
+		vals := strings.Split(subs[2], ",")
 		return true, ec2.Filter{Name: &name, Values: vals}
 	} else if matches, _ := regexp.MatchString(MatchShortFilter, filter); matches {
 		subs := strings.SplitN(filter, "=", 2)
 		name := subs[0]
 		vals := strings.Split(subs[1], ",")
 		return true, ec2.Filter{Name: &name, Values: vals}
+	} else if strings.HasPrefix(filter, "-") {
+		return false, ec2.Filter{}
 	} else if matches, _ := regexp.MatchString(MatchInstanceId, filter); matches {
 		name := FilterInstanceId
 		return true, ec2.Filter{Name: &name, Values: []string{filter}}

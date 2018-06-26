@@ -61,7 +61,8 @@ func usage() {
   -- <command> [ <arg> ... ]    : Override the task container command, 
 
 FARGATE                         : Specifying the following arguments implies using the FARGATE launch type.
-  -f:ip	  | --fargate:ip        : Request Fargate assign a public IP address to the container.
+  -f      | --fargate           : Activates fargate execution and accepts 0-n resource filters that apply to all taggable EC2 objects.
+  -f:ip   | --fargate:ip        : Request Fargate assign a public IP address to the container.
   -f:vpc  | --fargate:vpc       : Filter network config resources by VPCs matching the specified VPC filter. 
   -f:net  | --fargate:net       : Choose network configs based on a subnet ID or a tag=value pair attached to the desired subnet(s).
                                   The default VPC security group is selected by default.
@@ -71,6 +72,12 @@ FARGATE                         : Specifying the following arguments implies usi
 `
 	fmt.Printf(argHelp, filepath.Base(os.Args[0]))
 }
+
+const (
+	FilterModeCluster = iota
+	FilterModeHost    = iota
+	FilterModeNetwork = iota
+)
 
 type ParsedArgs struct {
 	AwsProfile, AwsRegion string
@@ -103,15 +110,22 @@ type ParsedArgs struct {
 
 	LaunchFargate bool
 
+	FilterMode int
+
+	// filters applied to all fargate net config queries.
+	AnyFilters []ec2.Filter
+
 	// filters evaluated to find a single vpc to use as an additional
 	// filter for -fg:net, -fg:host, and -fg:sg.
-	VpcFilters []ec2.Filter
+	VpcFilters  []ec2.Filter
+	DoFilterVpc bool
+
+	VpcSgFilters []ec2.Filter
+	DoFilterSgs  bool
 
 	VpcNetFilters []ec2.Filter
 
 	VpcHostFilters []ec2.Filter
-
-	VpcSgFilters []ec2.Filter
 
 	NetPublicIp bool
 
@@ -148,18 +162,19 @@ func parseArgs() ParsedArgs {
 	launchFargate := false
 	netPublicIp := false
 
+	filterMode := FilterModeCluster
+
+	var anyFilters []ec2.Filter
 	var vpcFilters []ec2.Filter
+	doFilterVpc := false
+	var vpcSgFilters []ec2.Filter
+	doFilterSgs := false
 	var vpcNetFilters []ec2.Filter
 	var vpcHostFilters []ec2.Filter
-	var vpcSgFilters []ec2.Filter
 
 	readFilterArgs := func(defaultFilter *string, optToEnd ...string) (int, []ec2.Filter) {
 		var filters []ec2.Filter
-		for i, optArg := range optToEnd {
-			if i > 1 {
-				// only use the default filter on the first pass
-				defaultFilter = nil
-			}
+		for _, optArg := range optToEnd {
 			valid, filter := ParseEc2Filter(optArg, defaultFilter)
 			if valid {
 				filters = append(filters, filter)
@@ -176,6 +191,10 @@ ArgLoop:
 		isNoOpt := strings.HasPrefix(opt, NoOptPrefix)
 		if isNoOpt {
 			opt = "--" + strings.TrimPrefix(opt, NoOptPrefix)
+		}
+
+		if strings.HasPrefix(opt, "-f:") || strings.HasPrefix(opt, "--fargate:") {
+			launchFargate = true
 		}
 
 		switch opt {
@@ -257,29 +276,31 @@ ArgLoop:
 			}
 		case "-f", "--fargate":
 			launchFargate = !isNoOpt
+			parsed, filters := readFilterArgs(nil, os.Args[i+1:]...)
+			anyFilters = append(anyFilters, filters...)
+			i = i + parsed
+		case "-f:sg", "--fargate:sg":
+			doFilterSgs = !isNoOpt
+			parsed, filters := readFilterArgs(aws.String(FilterTagName), os.Args[i+1:]...)
+			vpcSgFilters = append(vpcSgFilters, filters...)
+			i = i + parsed
 		case "-f:vpc", "--fargate:vpc":
-			launchFargate = true
+			doFilterVpc = !isNoOpt
 			parsed, filters := readFilterArgs(aws.String(FilterTagName), os.Args[i+1:]...)
 			vpcFilters = append(vpcFilters, filters...)
 			i = i + parsed
+		case "-f:ip", "--fargate:ip":
+			netPublicIp = !isNoOpt
 		case "-f:net", "--fargate:net":
-			launchFargate = true
+			filterMode = FilterModeNetwork
 			parsed, filters := readFilterArgs(aws.String(FilterTagName), os.Args[i+1:]...)
 			vpcNetFilters = append(vpcNetFilters, filters...)
 			i = i + parsed
 		case "-f:host", "--fargate:host":
-			launchFargate = true
+			filterMode = FilterModeHost
 			parsed, filters := readFilterArgs(aws.String(FilterTagName), os.Args[i+1:]...)
 			vpcHostFilters = append(vpcHostFilters, filters...)
 			i = i + parsed
-		case "-f:sg", "--fargate:sg":
-			launchFargate = true
-			parsed, filters := readFilterArgs(aws.String(FilterTagName), os.Args[i+1:]...)
-			vpcSgFilters = append(vpcSgFilters, filters...)
-			i = i + parsed
-		case "-f:ip", "--fargate:ip":
-			launchFargate = true
-			netPublicIp = !isNoOpt
 		case "--":
 			overridesCmd = true
 			cmdOverride = append(cmdOverride, os.Args[i+1:]...)
@@ -308,10 +329,14 @@ ArgLoop:
 		ShellPrefix:       shellPrefix,
 		NoShell:           noShell,
 		LaunchFargate:     launchFargate,
+		FilterMode:        filterMode,
+		AnyFilters:        anyFilters,
 		VpcFilters:        vpcFilters,
+		DoFilterVpc:       doFilterVpc,
+		VpcSgFilters:      vpcSgFilters,
+		DoFilterSgs:       doFilterSgs,
 		VpcNetFilters:     vpcNetFilters,
 		VpcHostFilters:    vpcHostFilters,
-		VpcSgFilters:      vpcSgFilters,
 		NetPublicIp:       netPublicIp,
 		OverridesCmd:      overridesCmd,
 		CmdOverride:       cmdOverride}
@@ -423,7 +448,31 @@ func main() {
 	ctx := ExecutionContext{
 		AwsConfig:           &awsCfg,
 		TaskDefinition:      taskDefinition,
-		ContainerDefinition: containerDef}
+		ContainerDefinition: containerDef,
+		AnyFilters:          prefs.AnyFilters}
+
+	if prefs.DryRun {
+		log.Println("ANY Filters")
+		for _, filter := range prefs.AnyFilters {
+			log.Println(filter)
+		}
+		log.Println("VPC Filters")
+		for _, filter := range prefs.VpcFilters {
+			log.Println(filter)
+		}
+		log.Println("SG Filters")
+		for _, filter := range prefs.VpcSgFilters {
+			log.Println(filter)
+		}
+		log.Println("NET Filters")
+		for _, filter := range prefs.VpcNetFilters {
+			log.Println(filter)
+		}
+		log.Println("HOST Filters")
+		for _, filter := range prefs.VpcHostFilters {
+			log.Println(filter)
+		}
+	}
 
 	runTaskInput, taskInputErr := buildRunTaskInput(&prefs, &ctx)
 	if taskInputErr != nil {
@@ -519,17 +568,16 @@ type ExecutionContext struct {
 	AwsConfig           *aws.Config
 	TaskDefinition      *ecs.TaskDefinition
 	ContainerDefinition *ecs.ContainerDefinition
-	// if the VpcsFilter is set, append to all fargate config filters
-	VpcsFilter *ec2.Filter
+	AnyFilters          []ec2.Filter
 }
 
 func restrictToVpcs(prefs *ParsedArgs, ctx *ExecutionContext) (*ec2.Filter, error) {
-	if len(prefs.VpcFilters) > 0 {
-		if *prefs.VpcFilters[0].Name == FilterVpcId {
+	if prefs.DoFilterVpc {
+		if len(prefs.VpcFilters) > 0 && *prefs.VpcFilters[0].Name == FilterVpcId {
 			return &prefs.VpcFilters[0], nil
 		}
 		ec2s := ec2.New(*ctx.AwsConfig)
-		input := ec2.DescribeVpcsInput{Filters: prefs.VpcFilters}
+		input := ec2.DescribeVpcsInput{Filters: append(prefs.VpcFilters, ctx.AnyFilters...)}
 		result, err := ec2s.DescribeVpcsRequest(&input).Send()
 		if err != nil {
 			return nil, err
@@ -546,22 +594,18 @@ func restrictToVpcs(prefs *ParsedArgs, ctx *ExecutionContext) (*ec2.Filter, erro
 }
 
 func constructFargateVpcConfig(prefs *ParsedArgs, ctx *ExecutionContext) (ecs.NetworkConfiguration, error) {
-	if len(prefs.VpcHostFilters) > 0 {
+	switch prefs.FilterMode {
+	case FilterModeHost:
 		return vpcConfigForHost(prefs, ctx, prefs.VpcHostFilters)
-	} else if len(prefs.VpcNetFilters) > 0 {
+	case FilterModeNetwork:
 		return vpcConfigForNet(prefs, ctx, prefs.VpcNetFilters)
-	} else {
-		return vpcConfigForCluster(prefs, ctx)
 	}
+	return vpcConfigForCluster(prefs, ctx)
 }
 
 func secGroupsQuery(ctx *ExecutionContext, filters []ec2.Filter) ([]string, error) {
 	ec2s := ec2.New(*ctx.AwsConfig)
-	input := ec2.DescribeSecurityGroupsInput{}
-	input.Filters = filters
-	if ctx.VpcsFilter != nil {
-		input.Filters = append(input.Filters, *ctx.VpcsFilter)
-	}
+	input := ec2.DescribeSecurityGroupsInput{Filters: append(filters, ctx.AnyFilters...)}
 
 	result, err := ec2s.DescribeSecurityGroupsRequest(&input).Send()
 	if err != nil {
@@ -593,7 +637,7 @@ func vpcConfigForCluster(prefs *ParsedArgs, ctx *ExecutionContext) (ecs.NetworkC
 					instanceIds = append(instanceIds, *ci.Ec2InstanceId)
 				}
 			}
-			instanceFilter := ec2.Filter{Name:aws.String(FilterInstanceId), Values:instanceIds}
+			instanceFilter := ec2.Filter{Name: aws.String(FilterInstanceId), Values: instanceIds}
 			return vpcConfigForHost(prefs, ctx, []ec2.Filter{instanceFilter})
 		}
 	}
@@ -606,12 +650,11 @@ func vpcConfigForNet(prefs *ParsedArgs, ctx *ExecutionContext, filters []ec2.Fil
 	ec2s := ec2.New(*ctx.AwsConfig)
 	dsInput := ec2.DescribeSubnetsInput{}
 	dsInput.Filters = filters
-	if ctx.VpcsFilter != nil {
-		dsInput.Filters = append(dsInput.Filters, *ctx.VpcsFilter)
-	}
+	dsInput.Filters = append(dsInput.Filters, ctx.AnyFilters...)
 
 	dsResult, dsErr := ec2s.DescribeSubnetsRequest(&dsInput).Send()
 	if dsErr != nil {
+		log.Println(dsInput.Filters[0].String())
 		return ecs.NetworkConfiguration{}, dsErr
 	}
 
@@ -623,19 +666,23 @@ func vpcConfigForNet(prefs *ParsedArgs, ctx *ExecutionContext, filters []ec2.Fil
 				subnets = append(subnets, *subnet.SubnetId)
 			}
 		}
+
 		var sgroups []string
-		if len(prefs.VpcSgFilters) > 0 {
-			sgResult, sgErr := secGroupsQuery(ctx, prefs.VpcSgFilters)
-			if sgErr != nil {
-				return ecs.NetworkConfiguration{}, sgErr
-			} else {
-				sgroups = append(sgroups, sgResult...)
-			}
+		sgResult, sgErr := secGroupsQuery(ctx, prefs.VpcSgFilters)
+		if sgErr != nil {
+			return ecs.NetworkConfiguration{}, sgErr
+		} else {
+			sgroups = append(sgroups, sgResult...)
 		}
+		if len(sgroups) > 10 {
+			sgroups = sgroups[0:10]
+		}
+
 		assignPublicIp := ecs.AssignPublicIpDisabled
 		if prefs.NetPublicIp {
 			assignPublicIp = ecs.AssignPublicIpEnabled
 		}
+
 		awsvpc := ecs.AwsVpcConfiguration{Subnets: subnets, SecurityGroups: sgroups, AssignPublicIp: assignPublicIp}
 		return ecs.NetworkConfiguration{AwsvpcConfiguration: &awsvpc}, nil
 	} else {
@@ -647,9 +694,7 @@ func vpcConfigForHost(prefs *ParsedArgs, ctx *ExecutionContext, filters []ec2.Fi
 	ec2s := ec2.New(*ctx.AwsConfig)
 	diInput := ec2.DescribeInstancesInput{}
 	diInput.Filters = filters
-	if ctx.VpcsFilter != nil {
-		diInput.Filters = append(diInput.Filters, *ctx.VpcsFilter)
-	}
+	diInput.Filters = append(diInput.Filters, ctx.AnyFilters...)
 
 	diResult, diErr := ec2s.DescribeInstancesRequest(&diInput).Send()
 	if diErr != nil {
@@ -659,24 +704,35 @@ func vpcConfigForHost(prefs *ParsedArgs, ctx *ExecutionContext, filters []ec2.Fi
 	if len(diResult.Reservations) > 0 && len(diResult.Reservations[0].Instances) > 0 {
 		instance := diResult.Reservations[0].Instances[0]
 		subnets := []string{*instance.SubnetId}
-		var sgroups []string
-		if len(prefs.VpcSgFilters) > 0 {
+
+		sgroupMap := make(map[string]string, len(instance.SecurityGroups))
+		for _, sgroup := range instance.SecurityGroups {
+			id := *sgroup.GroupId
+			sgroupMap[id] = id
+		}
+		if prefs.DoFilterSgs {
 			sgResult, sgErr := secGroupsQuery(ctx, prefs.VpcSgFilters)
 			if sgErr != nil {
 				return ecs.NetworkConfiguration{}, sgErr
 			} else {
-				sgroups = append(sgroups, sgResult...)
-			}
-		} else {
-			for i, sgroup := range instance.SecurityGroups {
-				if i < 10 {
-					sgroups = append(sgroups, *sgroup.GroupId)
+				for _, id := range sgResult {
+					if len(sgroupMap) < 10 {
+						sgroupMap[id] = id
+					}
 				}
 			}
 		}
 		assignPublicIp := ecs.AssignPublicIpDisabled
 		if prefs.NetPublicIp {
 			assignPublicIp = ecs.AssignPublicIpEnabled
+		}
+		var sgroups []string
+		for _, v := range sgroupMap {
+			if len(sgroups) < 10 {
+				sgroups = append(sgroups, v)
+			} else {
+				break
+			}
 		}
 		awsvpc := ecs.AwsVpcConfiguration{Subnets: subnets, SecurityGroups: sgroups, AssignPublicIp: assignPublicIp}
 		return ecs.NetworkConfiguration{AwsvpcConfiguration: &awsvpc}, nil
@@ -748,7 +804,10 @@ func buildRunTaskInput(prefs *ParsedArgs, ctx *ExecutionContext) (*ecs.RunTaskIn
 		if err != nil {
 			return nil, err
 		}
-		ctx.VpcsFilter = vpcsFilter
+
+		if vpcsFilter != nil {
+			ctx.AnyFilters = append(ctx.AnyFilters, *vpcsFilter)
+		}
 
 		netConfig, err := constructFargateVpcConfig(prefs, ctx)
 		if err != nil {
